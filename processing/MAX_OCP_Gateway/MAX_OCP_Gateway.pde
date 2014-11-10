@@ -1,13 +1,19 @@
 
-OPC opc;
-import processing.net.*;
-Server myServer;
+// for receiving messages from MAX
+import oscP5.*;
+import netP5.*;
 
-import hypermedia.net.*;
-UDP udp;  // define the UDP object
+OscP5 oscP5;
+
+// Open Pixel Protocol
+OPC opc;
 
 PImage texture;
 Ring rings[];
+
+PImage dot;
+
+float f1resonance;
 
 class Ring
 {
@@ -47,27 +53,28 @@ void setup()
   size(16*zoom, 8*zoom, P3D);
 
   colorMode(HSB, 100);
-  texture = loadImage("ring.png");
   
-  // noStroke();
-  // background(0);
- 
-  // frameRate(60);
-  
-  myServer = new Server(this, 7888); 
-  udp = new UDP( this, 6888 );
-  udp.listen(true);
-  udp.log(false);
-  
+  frameRate(30);
+    
+  // listen for OSC message from MAX
+  oscP5 = new OscP5(this, 6888);
+
+  // initialize our LED grids
   opc = new OPC(this, "127.0.0.1", 7890);
   opc.ledGrid8x8(0, width/4, height/2, height / 8.0, 0, false);
   opc.ledGrid8x8(64, width * 3/4, height/2, height / 8.0, 0, false);
+
+  texture = loadImage("ring.png");
 
   rings = new Ring[1];
   for (int i = 0; i < rings.length; i++) {
     rings[i] = new Ring();
   }
   
+  f1resonance = 0.5;
+
+  dot = loadImage("purpleDot.png");
+
 }
 
 void draw()
@@ -76,45 +83,52 @@ void draw()
   
   // Give each ring a chance to redraw and update
   for (int i = 0; i < rings.length; i++) {
-    rings[i].draw();
+   rings[i].draw();
   }
-
-}
-
-void oldDraw()
-{
-  // Get the next available client
-  Client thisClient = myServer.available();
-  // If the client is not null, and says something, display what it said
-  if (thisClient !=null) {
-    String whatClientSaid = thisClient.readString();
-    if (whatClientSaid != null) {
-      println("=> " +  whatClientSaid);
-    } 
-  } 
-}
-
-void receive( byte[] data, String ip, int port ) {  // <-- extended handler
-    
-  // get the "real" message =
-  // forget the ";\n" at the end <-- !!! only for a communication with Pd !!!
-  data = subset(data, 0, data.length-2);
-  String message = new String( data );
   
-  if (message.substring(0,4).equals("bang")){
+  
+  constrain(f1resonance, 0.25, 0.75);
+  float dotSize = height * 1.25 * f1resonance + random(height/4);// 6 * (1.0 + 0.2 * sin(f1resonance));
+  constrain(dotSize, height/4, height * 2);
+  
+  blendMode(ADD);
+  tint(80, 70, 95);
+
+  // Draw it centered at the mouse location
+  image(dot, height/2 - dotSize/2, height/2 - dotSize/2, dotSize, dotSize);
+
+}
+
+void oscEvent(OscMessage theOscMessage) 
+{  
+  // get the first value as an integer
+  // int firstValue = theOscMessage.get(0).intValue();
+ 
+  // get the second value as a float  
+  // float secondValue = theOscMessage.get(1).floatValue();
+ 
+  // get the third value as a string
+  // String thirdValue = theOscMessage.get(2).stringValue();
+ 
+  
+  String addr = theOscMessage.addrPattern();
+  
+  if (addr.equals("/reso")){ // F1 Resonator, float[0 to 1.0]
+    float val = theOscMessage.get(0).floatValue();
+    println("reso: " + val);
+    f1resonance = val;
+  } else if (addr.equals("/beat")){
     beat();
-  } else if(message.substring(0,5).equals("int,i")){
-    println("Rcvd:" + message.substring(6));
-    char value = message.charAt(10);
-    println("RESO:" + value);
   } else {
-    // print the result
-    println( "receive: \""+message+"\" from "+ip+" on port "+port );
+    // print out the message
+    print("OSC Message Recieved: ");
+    print(theOscMessage.addrPattern() + " ");
+    println(" typetag: "+theOscMessage.typetag());
   }
+
 }
 
 void beat() {
-  // println("beat");
   rings[0].respawn( height/2, height/2, 66, height / 8 );
 }
 
